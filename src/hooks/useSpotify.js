@@ -251,12 +251,13 @@ export default function useSpotify(clientId) {
     const poll = setInterval(() => {
       try {
         const popupUrl = popup.location.href
-        if (popupUrl.includes('/callback')) {
+        const urlParams = new URLSearchParams(popup.location.search)
+        const code = urlParams.get('code')
+        const returnedState = urlParams.get('state')
+        // Check for callback either at /callback or / (Vercel may rewrite)
+        if ((popupUrl.includes('/callback') || popupUrl.includes(window.location.origin)) && code) {
           clearInterval(poll)
-          const urlParams = new URLSearchParams(popup.location.search)
           popup.close()
-          const code = urlParams.get('code')
-          const returnedState = urlParams.get('state')
           if (code && returnedState === state) {
             handleCallback(code)
           }
