@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 
-// Spotify internal lyrics endpoint via their color-lyrics API
-// Note: This requires a valid Spotify access token and spoofed user-agent
-const LYRICS_ENDPOINT = 'https://spclient.wg.spotify.com/color-lyrics/v2/track'
+// Lyrics proxy server URL — bypasses 403s from spclient.wg.spotify.com in browsers
+const LYRICS_PROXY_BASE = import.meta.env.VITE_LYRICS_PROXY_URL || 'http://localhost:3001'
 
 // EDGE 1: accepts playbackPositionRef (a ref) instead of a playbackPosition value
 // so lyrics sync runs via its own rAF loop without triggering parent re-renders at 60fps
@@ -115,23 +114,8 @@ export default function useLyrics(trackId, playbackPositionRef, isAuthenticated)
 }
 
 async function fetchLyrics(trackId) {
-  const accessToken = localStorage.getItem('spotify_access_token')
-  if (!accessToken) return null
-
   try {
-    // Spotify's internal lyrics endpoint
-    // Note: User-Agent is a forbidden header in the Fetch API and is silently ignored by browsers
-    const res = await fetch(
-      `${LYRICS_ENDPOINT}/${trackId}?format=json&vocalRemoval=false&market=from_token`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'App-Platform': 'iOS',
-          'spotify-app-version': '8.9.78.620',
-          Accept: 'application/json',
-        },
-      }
-    )
+    const res = await fetch(`${LYRICS_PROXY_BASE}/lyrics/${trackId}`)
 
     if (!res.ok) {
       console.warn('Lyrics fetch failed:', res.status)
