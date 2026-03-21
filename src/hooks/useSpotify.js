@@ -40,8 +40,12 @@ export default function useSpotify(clientId) {
   const playbackPositionRef = useRef(0)
   const failureCountRef = useRef(0)
 
-  // Handle OAuth callback — BUG 3 fix: set tokenExpiryRef after fresh login
+  // Handle OAuth callback for the redirect fallback path.
+  // Skip if running in a popup — the parent window handles the exchange to avoid
+  // double-use of the one-time authorization code.
   useEffect(() => {
+    if (window.opener && window.opener !== window) return
+
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const state = params.get('state')
@@ -59,8 +63,7 @@ export default function useSpotify(clientId) {
         if (result) {
           setAccessToken(result.token)
           setIsAuthenticated(true)
-          tokenExpiryRef.current = result.expiry  // BUG 3: set expiry for proactive refresh
-          // Clean up URL (CallbackHandler no longer redirects, so we handle it here)
+          tokenExpiryRef.current = result.expiry
           window.history.replaceState({}, '', '/')
         }
       })
@@ -200,6 +203,16 @@ export default function useSpotify(clientId) {
     }
   }, [isAuthenticated, accessToken, clientId, logout])
 
+  const handleCallback = useCallback(async (code) => {
+    const verifier = sessionStorage.getItem('pkce_verifier')
+    const result = await exchangeCodeForToken(code, verifier, clientId)
+    if (result) {
+      setAccessToken(result.token)
+      setIsAuthenticated(true)
+      tokenExpiryRef.current = result.expiry
+    }
+  }, [clientId])
+
   const login = useCallback(async () => {
     if (!clientId) {
       alert('Please set your Spotify Client ID in Settings first.')
@@ -223,7 +236,36 @@ export default function useSpotify(clientId) {
       state,
     })
 
-    window.location.href = `https://accounts.spotify.com/authorize?${params}`
+    const authUrl = `https://accounts.spotify.com/authorize?${params}`
+
+    // Try popup first (works on managed/corporate browsers that block page navigation)
+    const popup = window.open(authUrl, 'spotify-auth', 'width=600,height=700,left=200,top=100')
+
+    if (!popup || popup.closed) {
+      // Popup blocked — fall back to full page redirect
+      window.location.href = authUrl
+      return
+    }
+
+    // Poll popup for callback redirect
+    const poll = setInterval(() => {
+      try {
+        const popupUrl = popup.location.href
+        if (popupUrl.includes('/callback')) {
+          clearInterval(poll)
+          const urlParams = new URLSearchParams(popup.location.search)
+          popup.close()
+          const code = urlParams.get('code')
+          const returnedState = urlParams.get('state')
+          if (code && returnedState === state) {
+            handleCallback(code)
+          }
+        }
+      } catch {
+        // Cross-origin — still on Spotify, keep polling
+      }
+      if (popup.closed) clearInterval(poll)
+    }, 500)
   }, [clientId])
 
   return {
