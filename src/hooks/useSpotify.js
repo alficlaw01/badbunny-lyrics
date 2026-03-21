@@ -238,35 +238,25 @@ export default function useSpotify(clientId) {
 
     const authUrl = `https://accounts.spotify.com/authorize?${params}`
 
-    // Try popup first (works on managed/corporate browsers that block page navigation)
-    const popup = window.open(authUrl, 'spotify-auth', 'width=600,height=700,left=200,top=100')
-
-    if (!popup || popup.closed) {
-      // Popup blocked — fall back to full page redirect
-      window.location.href = authUrl
-      return
-    }
-
-    // Poll popup for callback redirect
-    const poll = setInterval(() => {
-      try {
-        const popupUrl = popup.location.href
-        const urlParams = new URLSearchParams(popup.location.search)
-        const code = urlParams.get('code')
-        const returnedState = urlParams.get('state')
-        // Check for callback either at /callback or / (Vercel may rewrite)
-        if ((popupUrl.includes('/callback') || popupUrl.includes(window.location.origin)) && code) {
-          clearInterval(poll)
-          popup.close()
-          if (code && returnedState === state) {
-            handleCallback(code)
-          }
+    // Listen for postMessage from callback page
+    const messageHandler = (event) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === 'spotify-callback') {
+        window.removeEventListener('message', messageHandler)
+        const { code: callbackCode, state: callbackState } = event.data
+        if (callbackCode && callbackState === state) {
+          handleCallback(callbackCode)
         }
-      } catch {
-        // Cross-origin — still on Spotify, keep polling
       }
-      if (popup.closed) clearInterval(poll)
-    }, 500)
+    }
+    window.addEventListener('message', messageHandler)
+
+    // Try popup first
+    const popup = window.open(authUrl, 'spotify-auth', 'width=600,height=700,left=200,top=100')
+    if (!popup || popup.closed) {
+      window.removeEventListener('message', messageHandler)
+      window.location.href = authUrl
+    }
   }, [clientId, handleCallback])
 
   return {

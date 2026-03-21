@@ -261,14 +261,22 @@ function NowPlaying({ track, isTranslating, translationError }) {
 // aborts the in-flight token exchange fetch in useSpotify. Instead, use React Router's
 // navigate() which is a client-side navigation that keeps the app (and useSpotify) alive.
 function CallbackHandler() {
-  const navigate = useNavigate()
-
   useEffect(() => {
-    // useSpotify (in AppContent) handles the token exchange and cleans up the URL.
-    // We just need to navigate away from /callback so the main UI renders.
-    // Using navigate() keeps AppContent mounted so useSpotify can finish the exchange.
-    navigate('/', { replace: true })
-  }, [navigate])
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const state = params.get('state')
+
+    if (code && state) {
+      // If opened in a popup, send message to parent and close
+      if (window.opener) {
+        window.opener.postMessage({ type: 'spotify-callback', code, state }, window.location.origin)
+        window.close()
+        return
+      }
+    }
+    // If not a popup (direct navigation), let useSpotify handle it via URL params
+    // Just show connecting state — useSpotify's useEffect will pick up the code
+  }, [])
 
   return (
     <div className="flex-1 flex items-center justify-center">
