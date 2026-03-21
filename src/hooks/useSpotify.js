@@ -266,7 +266,7 @@ export default function useSpotify(clientId) {
       }
       if (popup.closed) clearInterval(poll)
     }, 500)
-  }, [clientId])
+  }, [clientId, handleCallback])
 
   return {
     isAuthenticated,
