@@ -6,6 +6,38 @@ import useSpotify from './hooks/useSpotify'
 import useLyrics from './hooks/useLyrics'
 import useTranslation from './hooks/useTranslation'
 
+const LANGUAGE_MAP = {
+  AR: { flag: '🇸🇦', name: 'Arabic' },
+  BG: { flag: '🇧🇬', name: 'Bulgarian' },
+  CS: { flag: '🇨🇿', name: 'Czech' },
+  DA: { flag: '🇩🇰', name: 'Danish' },
+  DE: { flag: '🇩🇪', name: 'German' },
+  EL: { flag: '🇬🇷', name: 'Greek' },
+  ES: { flag: '🇪🇸', name: 'Spanish' },
+  ET: { flag: '🇪🇪', name: 'Estonian' },
+  FI: { flag: '🇫🇮', name: 'Finnish' },
+  FR: { flag: '🇫🇷', name: 'French' },
+  HU: { flag: '🇭🇺', name: 'Hungarian' },
+  ID: { flag: '🇮🇩', name: 'Indonesian' },
+  IT: { flag: '🇮🇹', name: 'Italian' },
+  JA: { flag: '🇯🇵', name: 'Japanese' },
+  KO: { flag: '🇰🇷', name: 'Korean' },
+  LT: { flag: '🇱🇹', name: 'Lithuanian' },
+  LV: { flag: '🇱🇻', name: 'Latvian' },
+  NB: { flag: '🇳🇴', name: 'Norwegian' },
+  NL: { flag: '🇳🇱', name: 'Dutch' },
+  PL: { flag: '🇵🇱', name: 'Polish' },
+  PT: { flag: '🇧🇷', name: 'Portuguese' },
+  RO: { flag: '🇷🇴', name: 'Romanian' },
+  RU: { flag: '🇷🇺', name: 'Russian' },
+  SK: { flag: '🇸🇰', name: 'Slovak' },
+  SL: { flag: '🇸🇮', name: 'Slovenian' },
+  SV: { flag: '🇸🇪', name: 'Swedish' },
+  TR: { flag: '🇹🇷', name: 'Turkish' },
+  UK: { flag: '🇺🇦', name: 'Ukrainian' },
+  ZH: { flag: '🇨🇳', name: 'Chinese' },
+}
+
 function AppContent() {
   const location = useLocation()
   const [focusMode, setFocusMode] = useState(false)
@@ -30,7 +62,7 @@ function AppContent() {
     isAuthenticated
   )
 
-  const { translations, isTranslating, translationError } = useTranslation(lines, deeplApiKey)
+  const { translations, isTranslating, translationError, detectedLanguage, isEnglishSong } = useTranslation(lines, deeplApiKey)
 
   const isSettings = location.pathname === '/settings'
 
@@ -39,7 +71,7 @@ function AppContent() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-bold tracking-tight">🎵 Bad Bunny Live Lyrics</span>
+          <span className="text-xl font-bold tracking-tight">🎵 Lyrify</span>
         </div>
 
         <nav className="flex items-center gap-3">
@@ -108,6 +140,8 @@ function AppContent() {
                 translations={translations}
                 isTranslating={isTranslating}
                 translationError={translationError}
+                detectedLanguage={detectedLanguage}
+                isEnglishSong={isEnglishSong}
                 focusMode={focusMode}
                 login={login}
               />
@@ -131,6 +165,8 @@ function HomePage({
   translations,
   isTranslating,
   translationError,
+  detectedLanguage,
+  isEnglishSong,
   focusMode,
   login,
 }) {
@@ -161,13 +197,13 @@ function HomePage({
   if (!isAuthenticated) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-        <div className="text-8xl mb-6">🐰</div>
-        <h1 className="text-4xl font-bold mb-3">Bad Bunny Live Lyrics</h1>
+        <div className="text-8xl mb-6">🌍</div>
+        <h1 className="text-4xl font-bold mb-3">Lyrify</h1>
         <p className="text-white/60 mb-2 max-w-md text-lg">
-          Real-time synced lyrics with English translation.
+          Every song. Every language. In real time.
         </p>
         <p className="text-white/40 mb-8 max-w-md text-sm">
-          Connect Spotify, play a Bad Bunny song, and watch the lyrics sync word by word.
+          Connect Spotify, play any song, and watch the lyrics sync word by word with live translation.
         </p>
         <button
           onClick={login}
@@ -185,7 +221,7 @@ function HomePage({
         <div className="text-6xl mb-6 animate-pulse">🎧</div>
         <h2 className="text-2xl font-bold mb-3">Waiting for Playback</h2>
         <p className="text-white/50 max-w-md">
-          Open Spotify and play a Bad Bunny song. The lyrics will appear here automatically.
+          Play any song on Spotify. Lyrics will sync automatically, with translations for foreign language songs.
         </p>
         <div className="mt-8 flex gap-2">
           {barHeights.map((h, i) => (
@@ -207,7 +243,13 @@ function HomePage({
     <div className="flex-1 flex flex-col">
       {/* Now Playing */}
       {currentTrack && (
-        <NowPlaying track={currentTrack} isTranslating={isTranslating} translationError={translationError} />
+        <NowPlaying
+          track={currentTrack}
+          isTranslating={isTranslating}
+          translationError={translationError}
+          detectedLanguage={detectedLanguage}
+          isEnglishSong={isEnglishSong}
+        />
       )}
 
       {/* Lyrics */}
@@ -217,12 +259,15 @@ function HomePage({
         currentWordIndex={currentWordIndex}
         translations={translations}
         focusMode={focusMode}
+        isEnglishSong={isEnglishSong}
       />
     </div>
   )
 }
 
-function NowPlaying({ track, isTranslating, translationError }) {
+function NowPlaying({ track, isTranslating, translationError, detectedLanguage, isEnglishSong }) {
+  const langInfo = detectedLanguage ? LANGUAGE_MAP[detectedLanguage] : null
+
   return (
     <div className="flex flex-col border-b border-white/10 bg-[#111]">
       <div className="flex items-center gap-4 px-4 py-3">
@@ -237,6 +282,19 @@ function NowPlaying({ track, isTranslating, translationError }) {
           <div className="font-bold text-base truncate">{track.name}</div>
           <div className="text-white/50 text-sm truncate">{track.artist}</div>
         </div>
+
+        {/* Language indicator */}
+        {isEnglishSong && (
+          <div className="text-xs text-white/40 flex-shrink-0 hidden sm:flex items-center gap-1">
+            🇬🇧 English
+          </div>
+        )}
+        {!isEnglishSong && detectedLanguage && langInfo && (
+          <div className="text-xs text-white/40 flex-shrink-0 hidden sm:flex items-center gap-1">
+            {langInfo.flag} {langInfo.name} → 🇬🇧 English
+          </div>
+        )}
+
         {isTranslating && (
           <div className="text-xs text-white/30 flex items-center gap-1 flex-shrink-0">
             <span className="w-1.5 h-1.5 bg-[#FFE600] rounded-full animate-pulse" />

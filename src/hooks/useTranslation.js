@@ -9,12 +9,28 @@ export default function useTranslation(lines, deeplApiKey) {
   const [translations, setTranslations] = useState({}) // lineId -> translated text
   const [isTranslating, setIsTranslating] = useState(false)
   const [translationError, setTranslationError] = useState(null) // EDGE 4: surface quota/key errors
+  const [detectedLanguage, setDetectedLanguage] = useState(null) // e.g. 'ES', 'FR', 'JA'
+  const [isEnglishSong, setIsEnglishSong] = useState(false)
   const queueRef = useRef([]) // pending line ids to translate
   const timerRef = useRef(null)
   const inFlightRef = useRef(false)
+  const firstLineIdRef = useRef(null) // detect song changes
+  const isEnglishRef = useRef(false) // sync ref to avoid stale closures
 
   useEffect(() => {
     if (!lines.length || !deeplApiKey) return
+
+    // Detect new song and reset language detection state
+    const currentFirstId = lines[0].id
+    if (currentFirstId !== firstLineIdRef.current) {
+      firstLineIdRef.current = currentFirstId
+      isEnglishRef.current = false
+      setIsEnglishSong(false)
+      setDetectedLanguage(null)
+      queueRef.current = []
+    }
+
+    if (isEnglishRef.current) return
 
     // Determine which lines need translation
     const missing = lines.filter(line => {
@@ -42,7 +58,12 @@ export default function useTranslation(lines, deeplApiKey) {
     // Debounce batch translation
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      processBatch(lines, deeplApiKey, queueRef, setTranslations, setIsTranslating, setTranslationError, inFlightRef)
+      processBatch(
+        lines, deeplApiKey, queueRef,
+        setTranslations, setIsTranslating, setTranslationError,
+        setDetectedLanguage, isEnglishRef, setIsEnglishSong,
+        inFlightRef
+      )
     }, BATCH_DELAY_MS)
 
     return () => clearTimeout(timerRef.current)
@@ -51,10 +72,15 @@ export default function useTranslation(lines, deeplApiKey) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, deeplApiKey])
 
-  return { translations, isTranslating, translationError }
+  return { translations, isTranslating, translationError, detectedLanguage, isEnglishSong }
 }
 
-async function processBatch(lines, apiKey, queueRef, setTranslations, setIsTranslating, setTranslationError, inFlightRef) {
+async function processBatch(
+  lines, apiKey, queueRef,
+  setTranslations, setIsTranslating, setTranslationError,
+  setDetectedLanguage, isEnglishRef, setIsEnglishSong,
+  inFlightRef
+) {
   if (inFlightRef.current || !queueRef.current.length) return
 
   inFlightRef.current = true
@@ -83,6 +109,21 @@ async function processBatch(lines, apiKey, queueRef, setTranslations, setIsTrans
       setTranslationError(result.error)
     } else if (result?.translations) {
       setTranslationError(null)
+
+      // Capture auto-detected source language from DeepL
+      if (result.detectedLang) {
+        setDetectedLanguage(result.detectedLang)
+        if (result.detectedLang === 'EN') {
+          // Song is already in English — no translation needed
+          isEnglishRef.current = true
+          setIsEnglishSong(true)
+          queueRef.current = []
+          inFlightRef.current = false
+          setIsTranslating(false)
+          return
+        }
+      }
+
       const updates = {}
       textsToTranslate.forEach((line, i) => {
         if (result.translations[i]) {
@@ -101,7 +142,12 @@ async function processBatch(lines, apiKey, queueRef, setTranslations, setIsTrans
     // Process remaining items in queue
     if (queueRef.current.length > 0) {
       setTimeout(() => {
-        processBatch(lines, apiKey, queueRef, setTranslations, setIsTranslating, setTranslationError, inFlightRef)
+        processBatch(
+          lines, apiKey, queueRef,
+          setTranslations, setIsTranslating, setTranslationError,
+          setDetectedLanguage, isEnglishRef, setIsEnglishSong,
+          inFlightRef
+        )
       }, 100)
     }
   }
@@ -109,7 +155,8 @@ async function processBatch(lines, apiKey, queueRef, setTranslations, setIsTrans
 
 async function translateTexts(texts, apiKey) {
   // SEC 2: use Authorization header — not logged in request body by proxies
-  const params = new URLSearchParams({ target_lang: 'EN', source_lang: 'ES' })
+  // No source_lang: let DeepL auto-detect the source language
+  const params = new URLSearchParams({ target_lang: 'EN' })
   texts.forEach(text => params.append('text', text))
 
   try {
@@ -133,11 +180,18 @@ async function translateTexts(texts, apiKey) {
       if (res.status === 403) {
         return { error: 'Invalid DeepL API key — check Settings.' }
       }
+      if (res.status === 400) {
+        return { error: 'Language not supported for translation.' }
+      }
       return { error: `DeepL error ${res.status}` }
     }
 
     const data = await res.json()
-    return { translations: data.translations?.map(t => t.text) || [] }
+    const detectedLang = data.translations?.[0]?.detected_source_language || null
+    return {
+      translations: data.translations?.map(t => t.text) || [],
+      detectedLang,
+    }
   } catch (err) {
     console.error('DeepL fetch error:', err)
     return null

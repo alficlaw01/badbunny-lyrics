@@ -6,6 +6,7 @@ export default function LyricsDisplay({
   currentWordIndex,
   translations,
   focusMode,
+  isEnglishSong,
 }) {
   const containerRef = useRef(null)
   const currentLineRef = useRef(null)
@@ -46,6 +47,36 @@ export default function LyricsDisplay({
     )
   }
 
+  if (isEnglishSong) {
+    return (
+      <div className="flex-1 overflow-y-auto px-4 py-8" style={{ scrollBehavior: 'smooth' }}>
+        <div className="max-w-5xl mx-auto">
+          <div className="mb-6 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/50 text-sm">
+            🇬🇧 This song is in English — no translation needed
+          </div>
+          {lines.map((line, idx) => {
+            const isCurrent = idx === currentLineIndex
+            const isPast = idx < currentLineIndex
+            const isNear = Math.abs(idx - currentLineIndex) <= 2
+            return (
+              <LyricLine
+                key={line.id}
+                line={line}
+                translation={null}
+                isCurrent={isCurrent}
+                isPast={isPast}
+                isNear={isNear}
+                currentWordIndex={isCurrent ? currentWordIndex : -1}
+                singleColumn
+              />
+            )
+          })}
+          <div className="h-[40vh]" />
+        </div>
+      </div>
+    )
+  }
+
   if (focusMode) {
     return (
       <FocusMode
@@ -79,6 +110,7 @@ export default function LyricsDisplay({
               isNear={isNear}
               currentWordIndex={isCurrent ? currentWordIndex : -1}
               ref={isCurrent ? currentLineRef : null}
+              singleColumn={false}
             />
           )
         })}
@@ -90,7 +122,7 @@ export default function LyricsDisplay({
   )
 }
 
-const LyricLine = forwardRef(function LyricLine({ line, translation, isCurrent, isPast, isNear, currentWordIndex }, forwardedRef) {
+const LyricLine = forwardRef(function LyricLine({ line, translation, isCurrent, isPast, isNear, currentWordIndex, singleColumn }, forwardedRef) {
   const words = line.words || []
   const hasWords = words.length > 0
 
@@ -106,8 +138,8 @@ const LyricLine = forwardRef(function LyricLine({ line, translation, isCurrent, 
 
   return (
     <div ref={forwardedRef} className={containerClass}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-6 items-start">
-        {/* Spanish lyrics */}
+      <div className={`grid grid-cols-1 gap-2 md:gap-6 items-start ${singleColumn ? '' : 'md:grid-cols-2'}`}>
+        {/* Original lyrics */}
         <div className={`font-medium leading-relaxed ${isCurrent ? 'text-xl md:text-2xl' : 'text-base md:text-lg'}`}>
           {hasWords ? (
             <span>
@@ -152,19 +184,21 @@ const LyricLine = forwardRef(function LyricLine({ line, translation, isCurrent, 
         </div>
 
         {/* English translation */}
-        <div className={`leading-relaxed ${
-          isCurrent
-            ? 'text-lg md:text-xl text-[#FFE600]/80'
-            : 'text-sm md:text-base text-white/40'
-        }`}>
-          {translation ? (
-            translation
-          ) : (
-            <span className="text-white/20 text-sm italic">
-              {isCurrent ? 'Translating...' : ''}
-            </span>
-          )}
-        </div>
+        {!singleColumn && (
+          <div className={`leading-relaxed ${
+            isCurrent
+              ? 'text-lg md:text-xl text-[#FFE600]/80'
+              : 'text-sm md:text-base text-white/40'
+          }`}>
+            {translation ? (
+              translation
+            ) : (
+              <span className="text-white/20 text-sm italic">
+                {isCurrent ? 'Translating...' : ''}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

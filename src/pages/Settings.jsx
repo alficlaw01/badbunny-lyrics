@@ -115,7 +115,7 @@ export default function Settings() {
           <span className="text-[#FFE600]">●</span> DeepL API Key
         </h2>
         <p className="text-white/50 text-sm mb-4">
-          Used to translate Spanish lyrics to English. Free tier: 500,000 characters/month.
+          Used to translate foreign language lyrics to English. Supports 30+ languages. Free tier: 500,000 characters/month.
         </p>
 
         <div className="relative mb-3">
